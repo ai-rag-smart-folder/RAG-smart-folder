@@ -150,8 +150,8 @@ async def scan_folder(request: ScanRequest):
             "--db", "data/dev.db"
         ]
         
-        if not request.recursive:
-            cmd.append("--no-recursive")
+        if request.recursive:
+            cmd.append("--recursive")
         
         if request.find_duplicates:
             cmd.append("--duplicates")
