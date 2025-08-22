@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-backend
+    ports:
+      - "8003:8003"
+    volumes:
+      # Mount host directories for persistent data
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./quarantine:/app/quarantine
+      # Mount your home directory for scanning
+      - /Users/${USER}:/app/host_home:ro
+    environment:
+      - DATABASE_URL=sqlite:///./data/dev.db
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+      - API_HOST=0.0.0.0
+      - API_PORT=8003
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - rag-network
+
+networks:
+  rag-network:
+    driver: bridge
