@@ -1,0 +1,9 @@
+# Test requirements for scanner test suite
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pillow>=9.0.0
+imagehash>=4.3.0
+python-magic>=0.4.27
+exifread>=3.0.0
+numpy>=1.21.0
+scikit-learn>=1.0.0

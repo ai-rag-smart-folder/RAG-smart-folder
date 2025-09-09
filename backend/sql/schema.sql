@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS files (
     perceptual_hash TEXT,
     file_type TEXT(50),
     mime_type TEXT(100),
+    width INTEGER,
+    height INTEGER,
     created_at TIMESTAMP,
     modified_at TIMESTAMP,
     metadata_json TEXT,

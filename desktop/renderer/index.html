@@ -24,16 +24,44 @@
                 
                 <div class="scan-options">
                     <label><input type="checkbox" id="recursiveCheck" checked> Include subfolders</label>
-                    <label><input type="checkbox" id="findDuplicates" checked> Find duplicates</label>
                     <label><input type="checkbox" id="clearPrevious" checked> Clear previous data</label>
                 </div>
 
+                <div class="scan-mode-selection">
+                    <h4>Scan Mode:</h4>
+                    <div class="scan-modes">
+                        <label class="scan-mode">
+                            <input type="radio" name="scanMode" value="duplicates" checked>
+                            <span class="mode-title">Exact Duplicates</span>
+                            <span class="mode-desc">Find identical files using SHA256 hash</span>
+                        </label>
+                        <label class="scan-mode">
+                            <input type="radio" name="scanMode" value="similarity">
+                            <span class="mode-title">Image Similarity</span>
+                            <span class="mode-desc">Find similar images using cosine similarity</span>
+                        </label>
+                    </div>
+                    
+                    <div class="similarity-settings" id="similaritySettings" style="display: none;">
+                        <label class="similarity-threshold">
+                            Similarity Threshold: 
+                            <input type="range" id="scanSimilaritySlider" min="60" max="99" value="80" step="1">
+                            <span id="scanSimilarityValue">80%</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="action-buttons">
-                    <button id="scanButton" class="scan-btn" disabled>
-                        <span class="btn-text">Start Scan</span>
+                    <button id="scanDuplicatesBtn" class="scan-btn" disabled>
+                        <span class="btn-text">Scan Duplicates</span>
                         <span class="btn-loader" style="display: none;">Scanning...</span>
                     </button>
+                    <button id="scanSimilarityBtn" class="scan-btn similarity-btn" disabled style="display: none;">
+                        <span class="btn-text">Scan Similar Images</span>
+                        <span class="btn-loader" style="display: none;">Analyzing...</span>
+                    </button>
                     <button id="clearButton" class="clear-btn">Clear Database</button>
+                    <button id="testImageBtn" class="clear-btn" style="margin-left: 10px;">Test Image Loading</button>
                 </div>
             </section>
 
@@ -60,6 +88,8 @@
                 <div class="tabs">
                     <button class="tab-btn active" data-tab="files">Files</button>
                     <button class="tab-btn" data-tab="duplicates">Duplicates</button>
+                    <button class="tab-btn" data-tab="images">Images</button>
+                    <button class="tab-btn" data-tab="similar">Similar Images</button>
                 </div>
 
                 <div class="tab-content active" id="filesTab">
@@ -69,6 +99,22 @@
                 <div class="tab-content" id="duplicatesTab">
                     <div class="duplicates-list" id="duplicatesList"></div>
                 </div>
+
+                <div class="tab-content" id="imagesTab">
+                    <div class="images-grid" id="imagesGrid"></div>
+                </div>
+
+                <div class="tab-content" id="similarTab">
+                    <div class="similarity-controls">
+                        <label>
+                            Similarity Threshold: 
+                            <input type="range" id="similaritySlider" min="50" max="100" value="80" step="1">
+                            <span id="similarityValue">80%</span>
+                        </label>
+                        <button id="refreshSimilarity" class="scan-btn">Refresh</button>
+                    </div>
+                    <div class="similar-groups" id="similarGroups"></div>
+                </div>
             </section>
 
             <section class="status-section">
@@ -77,6 +123,15 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Image Modal -->
+    <div class="image-modal" id="imageModal">
+        <div class="modal-content">
+            <button class="modal-close" id="modalClose">&times;</button>
+            <img class="modal-image" id="modalImage" src="" alt="">
+            <div class="modal-info" id="modalInfo"></div>
+        </div>
     </div>
 
     <script src="script.js"></script>

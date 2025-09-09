@@ -16,6 +16,8 @@ class File(Base):
     perceptual_hash = Column(String, index=True)  # Perceptual hash for images
     file_type = Column(String(50))
     mime_type = Column(String(100))
+    width = Column(Integer)  # Image width
+    height = Column(Integer)  # Image height
     created_at = Column(DateTime)
     modified_at = Column(DateTime)
     metadata_json = Column(Text)  # JSON string for additional metadata

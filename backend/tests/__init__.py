@@ -1,0 +1,1 @@
+# Test package for RAG Smart Folder scanner
