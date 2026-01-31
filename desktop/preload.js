@@ -5,5 +5,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
     selectFolder: () => ipcRenderer.invoke('select-folder'),
     getImageDataUrl: (filePath) => ipcRenderer.invoke('get-image-data-url', filePath),
-    checkImageExists: (filePath) => ipcRenderer.invoke('check-image-exists', filePath)
+    checkImageExists: (filePath) => ipcRenderer.invoke('check-image-exists', filePath),
+    openImageInViewer: (filePath) => ipcRenderer.invoke('open-image-in-viewer', filePath)
 });

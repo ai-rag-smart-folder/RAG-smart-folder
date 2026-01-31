@@ -136,32 +136,47 @@ class PerceptualHashDetector(DetectionAlgorithm):
     def _calculate_similarity(self, hash1: str, hash2: str) -> float:
         """
         Calculate similarity percentage between two perceptual hashes.
-        
+
         Args:
             hash1: First perceptual hash
             hash2: Second perceptual hash
-            
+
         Returns:
             Similarity percentage (0-100)
         """
         if not hash1 or not hash2:
             return 0.0
-        
+
         try:
             # Convert hex strings to imagehash objects
             h1 = self.imagehash.hex_to_hash(hash1)
             h2 = self.imagehash.hex_to_hash(hash2)
-            
+
             # Calculate Hamming distance
             hamming_distance = h1 - h2
-            
+
+            # For perceptual hash, the maximum distance depends on hash size
+            # A typical 64-bit hash has max distance of 64
+            # But for hex representation, we need to be more careful
+            hash_length = len(hash1)
+            if hash_length == 16:  # 64-bit hash (8 bytes * 2 hex chars per byte)
+                max_distance = 64
+            elif hash_length == 32:  # 128-bit hash
+                max_distance = 128
+            elif hash_length == 8:  # 32-bit hash
+                max_distance = 32
+            else:
+                # Fallback: assume it's a hex string where each char represents 4 bits
+                max_distance = hash_length * 4
+
             # Convert to similarity percentage
-            # Maximum possible distance is the hash size * 4 (for hex representation)
-            max_distance = len(str(h1)) * 4
-            similarity = max(0, (max_distance - hamming_distance) / max_distance * 100)
-            
+            if max_distance > 0:
+                similarity = max(0, (max_distance - hamming_distance) / max_distance * 100)
+            else:
+                similarity = 0.0
+
             return round(similarity, 1)
-            
+
         except Exception as e:
             self.logger.error(f"Error calculating similarity between {hash1} and {hash2}: {e}")
             return 0.0

@@ -74,8 +74,8 @@ class RAGSmartFolder {
             similarityValue.textContent = `${e.target.value}%`;
         });
         
-        document.getElementById('refreshSimilarity').addEventListener('click', () => {
-            this.loadSimilarImages();
+        document.getElementById('refreshSimilarity').addEventListener('click', async () => {
+            await this.loadSimilarImages();
         });
         
         // Scan mode selection
@@ -183,11 +183,11 @@ class RAGSmartFolder {
         const btn = document.getElementById('scanDuplicatesBtn');
         const btnText = btn.querySelector('.btn-text');
         const btnLoader = btn.querySelector('.btn-loader');
-        
+
         btn.disabled = true;
         btnText.style.display = 'none';
         btnLoader.style.display = 'inline-block';
-        
+
         this.scanStartTime = Date.now();
         this.log('Starting duplicate scan...', 'info');
 
@@ -195,7 +195,7 @@ class RAGSmartFolder {
             // Translate host path to container path for API
             const containerPath = this.translateHostPathToContainer(this.selectedFolderPath);
             console.log('Sending scan request with path:', containerPath);
-            
+
             const response = await fetch(`${this.apiBase}/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -214,10 +214,10 @@ class RAGSmartFolder {
             }
 
             const result = await response.json();
-            
+
             if (result.status === 'success') {
                 this.log(result.message, 'success');
-                
+
                 // Display enhanced statistics if available
                 if (result.statistics) {
                     const stats = result.statistics;
@@ -229,9 +229,13 @@ class RAGSmartFolder {
                         this.log(`Skipped ${stats.skipped_files} files`, 'info');
                     }
                 }
-                
-                await this.loadResults();
-                
+
+                // Force reload results after scan
+                setTimeout(async () => {
+                    await this.loadResults();
+                    await this.loadSimilarImages();
+                }, 500); // Small delay to ensure backend processing is complete
+
                 const scanTime = ((Date.now() - this.scanStartTime) / 1000).toFixed(1);
                 this.log(`Duplicate scan completed in ${scanTime}s`, 'success');
             } else {
@@ -246,7 +250,7 @@ class RAGSmartFolder {
                     console.error('Scan errors:', result.error_details);
                 }
             }
-            
+
         } catch (error) {
             this.log(`Duplicate scan failed: ${error.message}`, 'error');
         } finally {
@@ -266,11 +270,11 @@ class RAGSmartFolder {
         const btnText = btn.querySelector('.btn-text');
         const btnLoader = btn.querySelector('.btn-loader');
         const threshold = document.getElementById('scanSimilaritySlider').value;
-        
+
         btn.disabled = true;
         btnText.style.display = 'none';
         btnLoader.style.display = 'inline-block';
-        
+
         this.scanStartTime = Date.now();
         this.log(`Starting similarity scan with ${threshold}% threshold...`, 'info');
 
@@ -278,7 +282,7 @@ class RAGSmartFolder {
             // Translate host path to container path for API
             const containerPath = this.translateHostPathToContainer(this.selectedFolderPath);
             console.log('Sending similarity scan request with path:', containerPath);
-            
+
             const response = await fetch(`${this.apiBase}/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -298,10 +302,10 @@ class RAGSmartFolder {
             }
 
             const result = await response.json();
-            
+
             if (result.status === 'success') {
                 this.log(result.message, 'success');
-                
+
                 // Display enhanced statistics if available
                 if (result.statistics) {
                     const stats = result.statistics;
@@ -313,13 +317,16 @@ class RAGSmartFolder {
                         this.log(`Skipped ${stats.skipped_files} files`, 'info');
                     }
                 }
-                
-                // Load similarity results
-                await this.loadSimilarImages();
-                
+
+                // Force reload all results after similarity scan
+                setTimeout(async () => {
+                    await this.loadResults();
+                    await this.loadSimilarImages();
+                }, 500); // Small delay to ensure backend processing is complete
+
                 const scanTime = ((Date.now() - this.scanStartTime) / 1000).toFixed(1);
                 this.log(`Similarity scan completed in ${scanTime}s`, 'success');
-                
+
                 // Switch to similar images tab
                 this.switchTab('similar');
             } else {
@@ -334,7 +341,7 @@ class RAGSmartFolder {
                     console.error('Scan errors:', result.error_details);
                 }
             }
-            
+
         } catch (error) {
             this.log(`Similarity scan failed: ${error.message}`, 'error');
         } finally {
@@ -346,22 +353,38 @@ class RAGSmartFolder {
 
     async loadResults() {
         try {
+            this.log('Loading results from API...', 'info');
+
             const [filesResponse, duplicatesResponse, imagesResponse, statsResponse] = await Promise.all([
                 fetch(`${this.apiBase}/files`),
                 fetch(`${this.apiBase}/duplicates`),
                 fetch(`${this.apiBase}/images?similarity_threshold=80`),
                 fetch(`${this.apiBase}/scan/statistics`)
             ]);
-            
+
             const filesData = await filesResponse.json();
+            this.log(`Files API: ${filesData.total_files || 0} files`, 'info');
+
             const duplicatesData = await duplicatesResponse.json();
+            this.log(`Duplicates API: ${duplicatesData.duplicate_groups?.length || 0} groups`, 'info');
+
             const imagesData = imagesResponse.ok ? await imagesResponse.json() : { images: [], similar_images: [] };
+            this.log(`Images API: ${imagesData.total_images || 0} images, ${imagesData.similar_groups || 0} similar groups`, 'info');
+
             const statsData = statsResponse.ok ? await statsResponse.json() : null;
-            
+            this.log(`Stats API: ${statsData ? 'Available' : 'Not available'}`, 'info');
+
+            console.log('Files data:', filesData);
+            console.log('Duplicates data:', duplicatesData);
+            console.log('Images data:', imagesData);
+
             await this.displayResults(filesData, duplicatesData, imagesData, statsData);
-            
+
+            this.log('Results loaded successfully', 'success');
+
         } catch (error) {
             this.log(`Failed to load results: ${error.message}`, 'error');
+            console.error('Load results error:', error);
         }
     }
     
@@ -369,15 +392,18 @@ class RAGSmartFolder {
         try {
             const threshold = document.getElementById('similaritySlider').value;
             this.log(`Loading similar images with ${threshold}% threshold...`, 'info');
-            
+
             const response = await fetch(`${this.apiBase}/images?similarity_threshold=${threshold}`);
             const imagesData = await response.json();
-            
+
+            console.log('Similar images data:', imagesData);
+
             this.displaySimilarImages(imagesData.similar_images || []);
-            this.log(`Found ${imagesData.similar_groups} similar groups`, 'success');
-            
+            this.log(`Found ${imagesData.similar_groups || 0} similar groups`, 'success');
+
         } catch (error) {
             this.log(`Failed to load similar images: ${error.message}`, 'error');
+            console.error('Load similar images error:', error);
         }
     }
 
@@ -389,12 +415,12 @@ class RAGSmartFolder {
         if (statsData && statsData.database_statistics) {
             const dbStats = statsData.database_statistics;
             const sizeStats = statsData.size_statistics;
-            
+
             document.getElementById('totalFiles').textContent = dbStats.total_files || 0;
             document.getElementById('duplicateGroups').textContent = dbStats.total_duplicates || 0;
             document.getElementById('totalSize').textContent = this.formatFileSize(sizeStats.total_size || totalSize);
             document.getElementById('scanTime').textContent = `${scanTime}s`;
-            
+
             // Log enhanced statistics
             if (dbStats.total_images > 0) {
                 this.log(`Found ${dbStats.total_images} images (${dbStats.images_with_perceptual_hash} with perceptual hashes)`, 'info');
@@ -411,9 +437,9 @@ class RAGSmartFolder {
         }
         
         this.displayFilesList(filesData.files || []);
-        this.displayDuplicatesList(duplicatesData.duplicates || []);
-        await this.displayImagesList(imagesData.images || [], imagesData.similar_images || []);
-        this.displaySimilarImages(imagesData.similar_images || []);
+        // this.displayDuplicatesList(duplicatesData.duplicates || []);
+        // await this.displayImagesList(imagesData.images || [], imagesData.similar_images || []);
+        // this.displaySimilarImages(imagesData.similar_images || []);
         
         document.getElementById('resultsSection').style.display = 'block';
     }
@@ -421,17 +447,38 @@ class RAGSmartFolder {
     displayFilesList(files) {
         const list = document.getElementById('filesList');
         list.innerHTML = files.length === 0 ? '<div class="file-item">No files found</div>' : '';
-        
+
         files.forEach(file => {
             const item = document.createElement('div');
             item.className = 'file-item';
-            item.innerHTML = `
-                <div class="file-info">
-                    <div class="file-name">${file.name}</div>
-                    <div class="file-path">${file.path}</div>
-                </div>
-                <div class="file-size">${this.formatFileSize(file.size)}</div>
-            `;
+
+            // Check if this is an image file
+            const isImage = this.isImageFile(file.name);
+
+            if (isImage) {
+                // Create image preview for image files
+                item.innerHTML = `
+                    <div class="image-loading">Loading preview...</div>
+                    <div class="file-info" style="display:none">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-path">${file.path}</div>
+                        <div class="file-size">${this.formatFileSize(file.size)}</div>
+                    </div>
+                `;
+
+                // Load image preview asynchronously
+                this.loadImagePreview(item, file.path, file.name);
+            } else {
+                // Regular file display
+                item.innerHTML = `
+                    <div class="file-info style="display:none"">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-path">${file.path}</div>
+                        <div class="file-size" style="width:100px; height:50px">${this.formatFileSize(file.size)}</div>
+                    </div>
+                `;
+            }
+
             list.appendChild(item);
         });
     }
@@ -439,33 +486,52 @@ class RAGSmartFolder {
     displayDuplicatesList(duplicates) {
         const list = document.getElementById('duplicatesList');
         list.innerHTML = duplicates.length === 0 ? '<div class="file-item">No duplicates found</div>' : '';
-        
+
+        // Add export button at the top
+        if (duplicates.length > 0) {
+            const exportBtn = document.createElement('button');
+            exportBtn.className = 'export-btn';
+            exportBtn.textContent = '📋 Export Duplicate Paths to Clipboard';
+            exportBtn.onclick = () => this.exportDuplicatePaths(duplicates);
+            list.insertBefore(exportBtn, list.firstChild);
+        }
+
         duplicates.forEach((group, index) => {
             const groupDiv = document.createElement('div');
             groupDiv.className = 'duplicate-group';
-            
+
             const header = document.createElement('div');
             header.className = 'duplicate-header';
-            header.textContent = `Group=== ${index + 1} (${group.count} files)`;
-            
+            header.textContent = `Group ${index + 1} (${group.count} files) - ${this.formatFileSize(group.total_size)} total`;
+
             const filesDiv = document.createElement('div');
             filesDiv.className = 'duplicate-files';
-            
-            group.files.forEach(filePath => {
+
+            group.files.forEach(file => {
                 const item = document.createElement('div');
                 item.className = 'file-item';
-                // Translate container path to host path for display
-                const translatedPath = this.translateContainerPathToHost(filePath);
+                // Use the file object structure from the API response
+                const translatedPath = this.translateContainerPathToHost(file.path);
+                const fileName = file.name || translatedPath.split('/').pop();
+
                 item.innerHTML = `
                     <div class="file-info">
-                        <div class="file-name">${translatedPath.split('/').pop()}</div>
+                        <div class="file-name">${fileName}</div>
                         <div class="file-path">${translatedPath}</div>
-                        <img src="file://${translatedPath}" alt="File Image" class="file-image" onerror="this.style.display='none'">
+                        <div class="file-size">${this.formatFileSize(file.size)}</div>
+                        ${file.is_original ? '<div class="original-badge">ORIGINAL</div>' : ''}
                     </div>
                 `;
+
+                // Add click handler for image preview if it's an image
+                if (this.isImageFile(fileName)) {
+                    item.style.cursor = 'pointer';
+                    item.addEventListener('click', () => this.openDuplicateImageModal(file, translatedPath));
+                }
+
                 filesDiv.appendChild(item);
             });
-            
+
             groupDiv.appendChild(header);
             groupDiv.appendChild(filesDiv);
             list.appendChild(groupDiv);
@@ -527,7 +593,7 @@ class RAGSmartFolder {
                 <div class="image-info">
                     <div class="image-name">${image.name}</div>
                     <div class="image-details">
-                        <span>${this.formatFileSize(image.size)}</span>
+                        <span style="width:50px;height:50px; ">${this.formatFileSize(image.size)}</span>
                         <span>${image.dimensions || 'Unknown'}</span>
                     </div>
                 </div>
@@ -647,24 +713,25 @@ class RAGSmartFolder {
         const modal = document.getElementById('imageModal');
         const modalImage = document.getElementById('modalImage');
         const modalInfo = document.getElementById('modalInfo');
-        
+
         // Show modal with loading state
         modalImage.src = '';
         modalImage.alt = 'Loading...';
-        
+
         // Translate container path to host path
         const translatedPath = this.translateContainerPathToHost(image.path);
-        
+
         modalInfo.innerHTML = `
             <strong>${image.name}</strong><br>
             ${translatedPath}<br>
             ${this.formatFileSize(image.size)} • ${image.dimensions || 'Unknown dimensions'}<br>
+            <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
             <em>Loading image...</em>
         `;
-        
+
         modal.classList.add('active');
         this.currentImageIndex = index;
-        
+
         // Load full-size image
         try {
             const dataUrl = await window.electronAPI.getImageDataUrl(translatedPath);
@@ -674,7 +741,8 @@ class RAGSmartFolder {
                 modalInfo.innerHTML = `
                     <strong>${image.name}</strong><br>
                     ${translatedPath}<br>
-                    ${this.formatFileSize(image.size)} • ${image.dimensions || 'Unknown dimensions'}
+                    ${this.formatFileSize(image.size)} • ${image.dimensions || 'Unknown dimensions'}<br>
+                    <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button>
                 `;
             } else {
                 modalImage.alt = 'Failed to load image';
@@ -682,7 +750,8 @@ class RAGSmartFolder {
                     <strong>${image.name}</strong><br>
                     ${translatedPath}<br>
                     ${this.formatFileSize(image.size)} • ${image.dimensions || 'Unknown dimensions'}<br>
-                    <em style="color: red;">Failed to load image</em>
+                    <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+                    <em style="color: red;">Failed to load image preview</em>
                 `;
             }
         } catch (error) {
@@ -692,8 +761,177 @@ class RAGSmartFolder {
                 <strong>${image.name}</strong><br>
                 ${translatedPath}<br>
                 ${this.formatFileSize(image.size)} • ${image.dimensions || 'Unknown dimensions'}<br>
-                <em style="color: red;">Error loading image</em>
+                <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+                <em style="color: red;">Error loading image preview</em>
             `;
+        }
+    }
+
+    async openDuplicateImageModal(file, translatedPath) {
+        const modal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        const modalInfo = document.getElementById('modalInfo');
+
+        // Show modal with loading state
+        modalImage.src = '';
+        modalImage.alt = 'Loading...';
+
+        modalInfo.innerHTML = `
+            <strong>${file.name}</strong><br>
+            ${translatedPath}<br>
+            ${this.formatFileSize(file.size)}<br>
+            <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+            <em>Loading image...</em>
+        `;
+
+        modal.classList.add('active');
+
+        // Load full-size image
+        try {
+            const dataUrl = await window.electronAPI.getImageDataUrl(translatedPath);
+            if (dataUrl) {
+                modalImage.src = dataUrl;
+                modalImage.alt = file.name;
+                modalInfo.innerHTML = `
+                    <strong>${file.name}</strong><br>
+                    ${translatedPath}<br>
+                    ${this.formatFileSize(file.size)}<br>
+                    <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+                    ${file.is_original ? '<span style="color: green; font-weight: bold;">ORIGINAL FILE</span>' : '<span style="color: orange;">Duplicate</span>'}
+                `;
+            } else {
+                modalImage.alt = 'Failed to load image';
+                modalInfo.innerHTML = `
+                    <strong>${file.name}</strong><br>
+                    ${translatedPath}<br>
+                    ${this.formatFileSize(file.size)}<br>
+                    <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+                    <em style="color: red;">Failed to load image preview</em>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading duplicate image:', error);
+            modalImage.alt = 'Error loading image';
+            modalInfo.innerHTML = `
+                <strong>${file.name}</strong><br>
+                ${translatedPath}<br>
+                ${this.formatFileSize(file.size)}<br>
+                <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+                <em style="color: red;">Error loading image preview</em>
+            `;
+        }
+    }
+
+    async openSimilarImageModal(image, groupIndex, imageIndex) {
+        const modal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        const modalInfo = document.getElementById('modalInfo');
+
+        // Show modal with loading state
+        modalImage.src = '';
+        modalImage.alt = 'Loading...';
+
+        // Translate container path to host path
+        const translatedPath = this.translateContainerPathToHost(image.path);
+
+        modalInfo.innerHTML = `
+            <strong>${image.name}</strong><br>
+            ${translatedPath}<br>
+            ${this.formatFileSize(image.size)} • ${image.dimensions || 'Unknown dimensions'}<br>
+            Similarity: ${image.similarity}%<br>
+            <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+            <em>Loading image...</em>
+        `;
+
+        modal.classList.add('active');
+
+        // Load full-size image
+        try {
+            const dataUrl = await window.electronAPI.getImageDataUrl(translatedPath);
+            if (dataUrl) {
+                modalImage.src = dataUrl;
+                modalImage.alt = image.name;
+                modalInfo.innerHTML = `
+                    <strong>${image.name}</strong><br>
+                    ${translatedPath}<br>
+                    ${this.formatFileSize(image.size)} • ${image.dimensions || 'Unknown dimensions'}<br>
+                    <strong>Similarity: ${image.similarity}%</strong><br>
+                    <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+                    ${image.is_original ? '<span style="color: green; font-weight: bold;">SUGGESTED ORIGINAL</span>' : '<span style="color: blue;">Similar Image</span>'}
+                `;
+            } else {
+                modalImage.alt = 'Failed to load image';
+                modalInfo.innerHTML = `
+                    <strong>${image.name}</strong><br>
+                    ${translatedPath}<br>
+                    ${this.formatFileSize(image.size)} • ${image.dimensions || 'Unknown dimensions'}<br>
+                    Similarity: ${image.similarity}%<br>
+                    <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+                    <em style="color: red;">Failed to load image preview</em>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading similar image:', error);
+            modalImage.alt = 'Error loading image';
+            modalInfo.innerHTML = `
+                <strong>${image.name}</strong><br>
+                ${translatedPath}<br>
+                ${this.formatFileSize(image.size)} • ${image.dimensions || 'Unknown dimensions'}<br>
+                Similarity: ${image.similarity}%<br>
+                <button class="open-in-viewer-btn" onclick="app.openImageInDefaultViewer('${translatedPath.replace(/'/g, "\\'")}')">🖼️ Open in Default Viewer</button><br>
+                <em style="color: red;">Error loading image preview</em>
+            `;
+        }
+    }
+
+    exportDuplicatePaths(duplicates) {
+        try {
+            let exportText = 'DUPLICATE FILES LIST\n';
+            exportText += '=' .repeat(50) + '\n\n';
+
+            duplicates.forEach((group, index) => {
+                exportText += `DUPLICATE GROUP ${index + 1}\n`;
+                exportText += `Files: ${group.count} | Total Size: ${this.formatFileSize(group.total_size)}\n`;
+                exportText += '-'.repeat(40) + '\n';
+
+                group.files.forEach((file, fileIndex) => {
+                    const translatedPath = this.translateContainerPathToHost(file.path);
+                    const marker = file.is_original ? '[ORIGINAL]' : '[DUPLICATE]';
+                    exportText += `${fileIndex + 1}. ${marker} ${translatedPath}\n`;
+                });
+
+                exportText += '\n';
+            });
+
+            // Copy to clipboard
+            navigator.clipboard.writeText(exportText).then(() => {
+                this.log('✅ Duplicate file paths copied to clipboard!', 'success');
+            }).catch(err => {
+                console.error('Failed to copy to clipboard:', err);
+                // Fallback: show in console
+                console.log('Duplicate file paths:');
+                console.log(exportText);
+                this.log('❌ Clipboard copy failed - check console for paths', 'error');
+            });
+
+        } catch (error) {
+            console.error('Export error:', error);
+            this.log('❌ Failed to export duplicate paths', 'error');
+        }
+    }
+
+    async openImageInDefaultViewer(imagePath) {
+        try {
+            this.log(`Opening image in default viewer: ${imagePath}`, 'info');
+            const result = await window.electronAPI.openImageInViewer(imagePath);
+            if (result) {
+                this.log('✅ Image opened in default viewer', 'success');
+            } else {
+                this.log('❌ Failed to open image in viewer', 'error');
+            }
+        } catch (error) {
+            console.error('Error opening image in viewer:', error);
+            this.log('❌ Error opening image in viewer', 'error');
         }
     }
 
@@ -703,32 +941,32 @@ class RAGSmartFolder {
 
     displaySimilarImages(similarGroups) {
         const container = document.getElementById('similarGroups');
-        container.innerHTML = similarGroups.length === 0 ? 
+        container.innerHTML = similarGroups.length === 0 ?
             '<div class="file-item">No similar images found above the threshold</div>' : '';
-        
+
         similarGroups.forEach((group, groupIndex) => {
             const groupDiv = document.createElement('div');
             groupDiv.className = 'similar-group';
-            
+
             const header = document.createElement('div');
             header.className = 'similar-group-header';
             header.innerHTML = `
-                <span>Similar Group ---- ${groupIndex + 1} (${group.count} images)</span>
+                <span>Similar Group ${groupIndex + 1} (${group.count} images)</span>
                 <div class="similarity-stats">
                     Avg: ${group.avg_similarity}% | Range: ${group.min_similarity}%-${group.max_similarity}%
                 </div>
             `;
-            
+
             const imagesGrid = document.createElement('div');
             imagesGrid.className = 'similar-images-grid';
-            
+
             group.images.forEach((image, imageIndex) => {
                 const item = document.createElement('div');
                 item.className = 'similar-image-item';
-                
-                const similarityClass = image.similarity === 100 ? 'exact' : 
+
+                const similarityClass = image.similarity === 100 ? 'exact' :
                                       image.similarity >= 95 ? 'high' : '';
-                
+
                 item.innerHTML = `
                     <div class="similarity-percentage ${similarityClass}">${image.similarity}%</div>
                     <div class="image-loading">Loading...</div>
@@ -738,16 +976,17 @@ class RAGSmartFolder {
                             <span>${this.formatFileSize(image.size)}</span>
                             <span>${image.dimensions || 'Unknown'}</span>
                         </div>
+                        ${image.is_original ? '<div class="original-badge-small">ORIGINAL</div>' : ''}
                     </div>
                 `;
-                
-                item.addEventListener('click', () => this.openImageModal(image, imageIndex));
+
+                item.addEventListener('click', () => this.openSimilarImageModal(image, groupIndex, imageIndex));
                 imagesGrid.appendChild(item);
-                
+
                 // Load image asynchronously
                 this.loadSimilarImagePreview(item, image.path, image.name);
             });
-            
+
             groupDiv.appendChild(header);
             groupDiv.appendChild(imagesGrid);
             container.appendChild(groupDiv);
